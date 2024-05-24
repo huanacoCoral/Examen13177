@@ -1,78 +1,44 @@
-#include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <mpi.h>
 
-void generate_series(int start, int count, int* series) {
-    for (int i = 0; i < count; i++) {
-        series[i] = start + 2 * i;
+// Función para generar y mostrar la serie
+void generandoCadena(int start_cadena, int end_cadena, int paso_cadena, int proceso_id) {
+    for (int i = start_cadena; i <= end_cadena; i += paso_cadena) {
+        printf("Proceso %d: %d\n", proceso_id, i);
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char *argv[]) {
+    int proceso_id, num_procesos;
+    const int elementos_por_proceso = 8; // Número de elementos en cada porción de la serie
+
+    // Inicialización de MPI
     MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &proceso_id);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procesos);
 
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    // Cálculo del número total de elementos en la serie
+    const int total_elementos_serie = elementos_por_proceso * num_procesos * 2;
 
-    int N = 18;  // Número total de términos deseados
-    int terms_per_process = N / size;
-    int extra = N % size;
+    // Determinación del inicio y fin de la serie para cada procesador
+    const int start_cadena = proceso_id * elementos_por_proceso * 2 + 2;
+    int end_cadena = start_cadena + (elementos_por_proceso * 2 - 2);
 
-    int start, count;
-    if (rank < extra) {
-        start = rank * (terms_per_process + 1) * 2 + 2;
-        count = terms_per_process + 1;
-    } else {
-        start = rank * terms_per_process * 2 + extra * 2 + 2;
-        count = terms_per_process;
+    // Ajuste del valor de fin si excede el total de elementos
+    if (end_cadena > total_elementos_serie) {
+        end_cadena = total_elementos_serie;
     }
 
-    int* partial_series = (int*)malloc(count * sizeof(int));
-    generate_series(start, count, partial_series);
+    // Información de depuración
+    printf("Proceso %d: inicio = %d, fin = %d\n", proceso_id, start_cadena, end_cadena);
 
-    int* recvcounts = NULL;
-    int* displs = NULL;
-    if (rank == 0) {
-        recvcounts = (int*)malloc(size * sizeof(int));
-        displs = (int*)malloc(size * sizeof(int));
+    // Generación y visualización de la serie
+    generandoCadena(start_cadena, end_cadena, 2, proceso_id);
 
-        for (int i = 0; i < size; i++) {
-            if (i < extra) {
-                recvcounts[i] = (terms_per_process + 1);
-            } else {
-                recvcounts[i] = terms_per_process;
-            }
-        }
-
-        displs[0] = 0;
-        for (int i = 1; i < size; i++) {
-            displs[i] = displs[i - 1] + recvcounts[i - 1];
-        }
-    }
-
-    int* complete_series = NULL;
-    if (rank == 0) {
-        complete_series = (int*)malloc(N * sizeof(int));
-    }
-
-    MPI_Gatherv(partial_series, count, MPI_INT, complete_series, recvcounts, displs, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (rank == 0) {
-        printf("Serie completa: ");
-        for (int i = 0; i < N; i++) {
-            printf("%d ", complete_series[i]);
-        }
-        printf("\n");
-
-        free(complete_series);
-        free(recvcounts);
-        free(displs);
-    }
-
-    free(partial_series);
-
+    // Finalización de MPI
     MPI_Finalize();
+
     return 0;
 }
 
